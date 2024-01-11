@@ -141,3 +141,34 @@ test_loop:
 	err = scheduler.RemoveTask(idx)
 	require.NoError(t, err)
 }
+
+func TestSchedulerExecutesTaskAtStartTime(t *testing.T) {
+	var finishedChan = make(chan bool, 1)
+
+	task := scheduled.NewTask(scheduled.TaskOpts{
+		Fn: func() error {
+			finishedChan <- true
+			return nil
+		},
+		Interval:  time.Second,
+		StartTime: time.Now().Add(10 * time.Second),
+	})
+
+	scheduler := scheduled.NewScheduler()
+	_, err := scheduler.RegisterTask(task)
+	require.NoError(t, err)
+
+test_loop:
+	for timeout := time.After(20 * time.Second); ; {
+		fmt.Println(time.Now())
+		select {
+		case <-timeout:
+			t.Fatalf("test timed out before the task ran")
+		case <-finishedChan:
+			break test_loop
+		default:
+			time.Sleep(time.Second)
+			continue
+		}
+	}
+}
