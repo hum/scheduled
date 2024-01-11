@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/essentialkaos/ek/v12/cron"
 )
 
 type TaskOpts struct {
@@ -18,6 +20,9 @@ type TaskOpts struct {
 
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
+
+	// Allows the scheduling based on a CRON string. Overrides `Interval`
+	Cron string
 }
 
 type TaskFunc func() error
@@ -36,6 +41,9 @@ type Task struct {
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
 
+	// Allows the scheduling based on a CRON string. Overrides `Interval`
+	cron *cron.Expr
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -47,11 +55,26 @@ func NewTask(opts TaskOpts) *Task {
 		ctx, cancel = context.WithCancel(context.Background())
 	)
 
+	// Only set the cron expression if the value is set
+	var cronExpr *cron.Expr = nil
+	if opts.Cron != "" {
+		expr := &opts.Cron
+
+		// Parse the cron expression to validate the task
+		c, err := cron.Parse(*expr)
+		if err != nil {
+			// @TODO: return an error
+			panic(err)
+		}
+		cronExpr = c
+	}
+
 	return &Task{
 		Fn:        opts.Fn,
 		ErrFn:     opts.ErrFn,
 		Interval:  opts.Interval,
 		StartTime: opts.StartTime,
+		cron:      cronExpr,
 		ctx:       ctx,
 		cancel:    cancel,
 	}

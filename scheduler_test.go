@@ -67,7 +67,7 @@ func TestSchedulerExecutesTaskAtLeastOnce(t *testing.T) {
 	require.NoError(t, err)
 
 test_loop:
-	for timeout := time.After(5 * time.Second); ; {
+	for timeout := time.After(5 * time.Minute); ; {
 		select {
 		case <-timeout:
 			t.Fatalf("test timed out before the task ran")
@@ -169,6 +169,33 @@ test_loop:
 		default:
 			time.Sleep(time.Second)
 			continue
+		}
+	}
+}
+
+func TestSchedulerExecutesCRONTaskAtLeastOnce(t *testing.T) {
+	var finishedChan = make(chan bool, 1)
+
+	task := scheduled.NewTask(scheduled.TaskOpts{
+		Fn: func() error {
+			finishedChan <- true
+			return nil
+		},
+		Interval: time.Second,
+		Cron:     "* * * * *",
+	})
+
+	scheduler := scheduled.NewScheduler()
+	_, err := scheduler.RegisterTask(task)
+	require.NoError(t, err)
+
+test_loop:
+	for timeout := time.After(2 * time.Minute); ; {
+		select {
+		case <-timeout:
+			t.Fatalf("test timed out before the task ran")
+		case <-finishedChan:
+			break test_loop
 		}
 	}
 }

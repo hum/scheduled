@@ -3,6 +3,7 @@ module github.com/hum/scheduled
 go 1.21.5
 
 require (
+	github.com/essentialkaos/ek/v12 v12.93.0
 	github.com/google/uuid v1.5.0
 	github.com/stretchr/testify v1.8.4
 )

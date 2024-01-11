@@ -112,14 +112,35 @@ func (s *Scheduler) execTask(task *Task, runOnce bool) {
 				// B) Expose a logging interface for the caller to have a control over
 				// C) Ignore (?)
 				fmt.Printf("err: task is cancelled but wanted to be ran\n")
+
+				// Make sure to also stop the tick timer
+				if task.t != nil {
+					task.t.Stop()
+				}
+				return
 			}
 
-			task.t = time.AfterFunc(task.Interval, func() {
+			// Default tick is the task's interval
+			var tick time.Duration = task.Interval
+
+			// If the task type is CRON, use the next CRON time as the tick
+			if task.cron != nil {
+				tick = time.Until(task.cron.Next())
+			}
+
+			task.t = time.AfterFunc(tick, func() {
 				go task.run()
 				defer func() {
 					if !runOnce {
-						// Reset the internal timer only if the task is supposed to be on a schedule
-						task.t.Reset(task.Interval)
+						// Reset the internal timer.
+						// @TODO: Is there a cleaner way to set this?
+						if task.cron != nil {
+							// CRON reset
+							task.t.Reset(time.Until(task.cron.Next()))
+						} else {
+							// Interval reset
+							task.t.Reset(task.Interval)
+						}
 					} else {
 						// Cancel the context and stop the internal timer for a runOnce task
 						task.cancel()
