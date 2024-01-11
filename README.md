@@ -1,8 +1,5 @@
 # scheduled
-**scheduled** implements an in-memory scheduler to run functions in a time loop.
-
-### TODO:
-- [ ] CRON
+**scheduled** implements an in-memory scheduler to run functions in a time loop. It also supports running functions with a CRON syntax scheduling.
 
 ---
 
@@ -42,5 +39,18 @@ task := scheduled.NewTask(scheduled.TaskOpts{
   Interval: 10*time.Second,
   // Starts the function in 5 hours, then runs it every 10 seconds
   StartTime: time.Now().Add(5*time.Hour),
+})
+```
+
+### With CRON
+A task supports a CRON syntax to act as the interval function. Use `Task.Cron` to pass in a CRON string.
+```go
+task := scheduled.NewTask(scheduled.TaskOpts{
+  Fn: func() error {
+    fmt.Println("Hello from task!")
+    return nil
+  },
+  // Run every minute
+  Cron: "* * * * *",
 })
 ```
