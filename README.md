@@ -4,6 +4,10 @@
 ---
 
 ## Usage
+### Get
+```bash
+> go get github.com/hum/scheduled
+```
 ### Basic
 Allows for a creation of simple functions, which get executed every `Interval` tick.
 ```go
