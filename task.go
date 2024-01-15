@@ -130,14 +130,8 @@ func NewTask(opts TaskOpts) *task {
 func (t *task) run() {
 	if err := t.Fn(); err != nil {
 		if t.ErrFn != nil {
-			// While it may not be pretty, it works.
-			// Dereferences the pointer into a function type only when ptr != nil
 			t.ErrFn(err)
-			return
 		}
-		// @TODO: what is the correct behaviour here?
-		fmt.Println("warn: task.Fn returned an error without t.ErrFn set")
-		return
 	}
 }
 

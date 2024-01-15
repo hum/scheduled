@@ -5,9 +5,12 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/google/uuid"
 )
 
+// Scheduler is the high-level structure to manage the in-memory tasks. Do not create the structure manually. Always use `scheduled.NewScheduler()`
 type Scheduler struct {
 	tasks    map[uuid.UUID]*task
 	taskLock sync.Mutex
@@ -63,11 +66,7 @@ func (s *Scheduler) Stop() {
 	for taskid := range s.tasks {
 		err := s.RemoveTask(taskid)
 		if err != nil {
-			// @TODO: Never print stuff to a console directly
-			// A) Return as a slice of errors to the caller
-			// B) Expose a logging interface for the caller to have a control over
-			// C) Ignore (?)
-			fmt.Printf("Err: Stop() could not remove task from the scheduler, got err=%s", err)
+			Logger.Error("could not remove task from the scheduler, got", "err", err)
 			continue
 		}
 	}
@@ -90,17 +89,11 @@ func (s *Scheduler) registerTask(t *task, runOnce bool) error {
 
 // execTask is the entrypoint for the execution of the task. It only accepts a task's identifier.
 // Tasks are ran in goroutines, which belong to each task respectively.
-//
-// @TODO: Should exec accept a task pointer to decouple it from the internal array buffer of tasks?
 func (s *Scheduler) execTask(task *task, runOnce bool) {
 	go func() {
 		time.AfterFunc(time.Until(task.StartTime), func() {
 			if err := task.ctx.Err(); err != nil {
-				// @TODO: Never print stuff to a console directly
-				// A) Return as a slice of errors to the caller
-				// B) Expose a logging interface for the caller to have a control over
-				// C) Ignore (?)
-				fmt.Printf("err: task=%s is cancelled but wanted to be ran\n", task.ID)
+				Logger.Error("cancelled task cannot execute", slog.String("task", task.ID.String()))
 
 				// Make sure to also stop the tick timer
 				if task.timer != nil {
@@ -127,7 +120,6 @@ func (s *Scheduler) execTask(task *task, runOnce bool) {
 				// Check if the task expired by reaching the maximum
 				if task.MaxIter > 0 {
 					if task.MaxIter == task.itercnt {
-						fmt.Println("task reached max iter")
 						s.RemoveTask(task.ID)
 						return
 					}
