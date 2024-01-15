@@ -118,6 +118,12 @@ func (s *Scheduler) execTask(task *task, runOnce bool) {
 			}
 
 			task.timer = time.AfterFunc(tick, func() {
+				// Make sure to check if the end time has not been exceeded
+				if task.EndTime != nil && time.Now().After(*task.EndTime) {
+					s.RemoveTask(task.ID)
+					return
+				}
+
 				go task.run()
 				defer func() {
 					if !runOnce {

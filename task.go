@@ -19,6 +19,9 @@ type TaskOpts struct {
 	// Offsets the initial startup to a given start time. By default it will start immediately on schedule.
 	StartTime time.Time
 
+	// Restricts the time boundary of the runtime to an end date. By default it is unbound.
+	EndTime time.Time
+
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
 
@@ -41,6 +44,9 @@ type task struct {
 
 	// Offsets the initial startup to a given start time. By default it will start immediately on schedule.
 	StartTime time.Time
+
+	// Restricts the time boundary of the runtime to an end date. By default it is unbound.
+	EndTime *time.Time
 
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
@@ -82,7 +88,18 @@ func NewTask(opts TaskOpts) *task {
 
 		// Internal context for the task. Used for cancellation.
 		ctx, cancel = context.WithCancel(context.Background())
+
+		endTime *time.Time
 	)
+
+	// If EndTime is not set, it defaults to 0001-01-01 00:00:00 +0000 UTC
+	if !opts.EndTime.IsZero() {
+		// Only allow end time if it is in the future
+		if opts.EndTime.Before(time.Now()) {
+			panic(fmt.Sprintf("task was scheduled to end in the past: %s", opts.EndTime.String()))
+		}
+		endTime = &opts.EndTime
+	}
 
 	return &task{
 		ID:        taskid,
@@ -90,6 +107,7 @@ func NewTask(opts TaskOpts) *task {
 		ErrFn:     opts.ErrFn,
 		Interval:  opts.Interval,
 		StartTime: opts.StartTime,
+		EndTime:   endTime,
 		cron:      cronExpr,
 		ctx:       ctx,
 		cancel:    cancel,
