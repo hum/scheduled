@@ -15,19 +15,18 @@ func TestSchedulerAddsTask(t *testing.T) {
 			fmt.Println("hello, world!")
 			return nil
 		},
-		// Large enough interval for the whole test to finish so that we do not print anything to the console
 		Interval: 15 * time.Second,
 	})
 
 	scheduler := scheduled.NewScheduler()
-	taskid, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
-	registeredTask, err := scheduler.GetTask(taskid)
+	registeredTask, err := scheduler.GetTask(task.ID)
 	require.NoError(t, err)
 	require.Equal(t, task, registeredTask)
 
-	err = scheduler.RemoveTask(taskid)
+	err = scheduler.RemoveTask(task.ID)
 	require.NoError(t, err)
 }
 
@@ -41,13 +40,13 @@ func TestSchedulerRemovesTask(t *testing.T) {
 	})
 
 	scheduler := scheduled.NewScheduler()
-	taskid, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
-	err = scheduler.RemoveTask(taskid)
+	err = scheduler.RemoveTask(task.ID)
 	require.NoError(t, err)
 
-	_, err = scheduler.GetTask(taskid)
+	_, err = scheduler.GetTask(task.ID)
 	require.Error(t, err)
 }
 
@@ -63,7 +62,7 @@ func TestSchedulerExecutesTaskAtLeastOnce(t *testing.T) {
 	})
 
 	scheduler := scheduled.NewScheduler()
-	_, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
 test_loop:
@@ -120,7 +119,7 @@ func TestSchedulerExecutesTaskMultipleTimes(t *testing.T) {
 	})
 
 	scheduler := scheduled.NewScheduler()
-	idx, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
 	var count = 0
@@ -138,7 +137,7 @@ test_loop:
 		}
 	}
 
-	err = scheduler.RemoveTask(idx)
+	err = scheduler.RemoveTask(task.ID)
 	require.NoError(t, err)
 }
 
@@ -155,7 +154,7 @@ func TestSchedulerExecutesTaskAtStartTime(t *testing.T) {
 	})
 
 	scheduler := scheduled.NewScheduler()
-	_, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
 test_loop:
@@ -186,7 +185,7 @@ func TestSchedulerExecutesCRONTaskAtLeastOnce(t *testing.T) {
 	})
 
 	scheduler := scheduled.NewScheduler()
-	_, err := scheduler.RegisterTask(task)
+	err := scheduler.RegisterTask(task)
 	require.NoError(t, err)
 
 test_loop:

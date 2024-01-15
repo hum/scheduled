@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/essentialkaos/ek/v12/cron"
+	"github.com/google/uuid"
 )
 
 type TaskOpts struct {
@@ -28,7 +29,10 @@ type TaskOpts struct {
 type TaskFunc func() error
 type TaskErrFunc func(err error)
 
-type Task struct {
+type task struct {
+	// Task identifier is used to be able to get and stop tasks already registered in the scheduler
+	ID uuid.UUID
+
 	// Underlying function to be ran within the scheduler
 	Fn TaskFunc
 
@@ -47,13 +51,14 @@ type Task struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	t *time.Timer
+	timer *time.Timer
 }
 
-func NewTask(opts TaskOpts) *Task {
-	var (
-		ctx, cancel = context.WithCancel(context.Background())
-	)
+func NewTask(opts TaskOpts) *task {
+	// If the caller has picked neither CRON nor interval, then we have no idea how to schedule the task
+	if opts.Cron == "" && opts.Interval <= 0 {
+		panic("neither cron nor interval is set")
+	}
 
 	// Only set the cron expression if the value is set
 	var cronExpr *cron.Expr = nil
@@ -69,7 +74,18 @@ func NewTask(opts TaskOpts) *Task {
 		cronExpr = c
 	}
 
-	return &Task{
+	var (
+		// uuid.NewUUID() only returns an (uuid, error) for historical reasons.
+		// It never returns an error anymore, so can be safely ignored.
+		// [Issue](https://github.com/google/uuid/issues/63)
+		taskid, _ = uuid.NewUUID()
+
+		// Internal context for the task. Used for cancellation.
+		ctx, cancel = context.WithCancel(context.Background())
+	)
+
+	return &task{
+		ID:        taskid,
 		Fn:        opts.Fn,
 		ErrFn:     opts.ErrFn,
 		Interval:  opts.Interval,
@@ -80,7 +96,7 @@ func NewTask(opts TaskOpts) *Task {
 	}
 }
 
-func (t *Task) run() {
+func (t *task) run() {
 	if err := t.Fn(); err != nil {
 		if t.ErrFn != nil {
 			// While it may not be pretty, it works.
@@ -92,4 +108,14 @@ func (t *Task) run() {
 		fmt.Println("warn: task.Fn returned an error without t.ErrFn set")
 		return
 	}
+}
+
+// resetTimer sets the next tick for the task to run with its internal timer.
+func (t *task) resetTimer() {
+	var next = t.Interval
+	if t.cron != nil {
+		// CRON has a precedence over interval
+		next = time.Until(t.cron.Next())
+	}
+	t.timer.Reset(next)
 }

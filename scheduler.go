@@ -9,7 +9,7 @@ import (
 )
 
 type Scheduler struct {
-	tasks    map[uuid.UUID]*Task
+	tasks    map[uuid.UUID]*task
 	taskLock sync.Mutex
 }
 
@@ -18,23 +18,22 @@ type Scheduler struct {
 // To use the scheduler, add a task via `scheduler.RegisterTask` or `scheduler.RunOnce`
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		tasks: make(map[uuid.UUID]*Task),
+		tasks: make(map[uuid.UUID]*task),
 	}
 }
 
-// Register allows for a task to be added within the execution loop of the scheduler
-func (s *Scheduler) RegisterTask(t *Task) (uuid.UUID, error) {
+// RegisterTask allows for a task to be added within the execution loop of the scheduler
+func (s *Scheduler) RegisterTask(t *task) error {
 	return s.registerTask(t, false)
 }
 
 // RunOnce allows a one-time execution of a task directly within the runtime of the scheduler
-func (s *Scheduler) RunOnce(t *Task) error {
-	_, err := s.registerTask(t, true)
-	return err
+func (s *Scheduler) RunOnce(t *task) error {
+	return s.registerTask(t, true)
 }
 
 // GetTask returns a task registered under provided uuid.UUID. If the task is not registered, the function returns an error.
-func (s *Scheduler) GetTask(idx uuid.UUID) (*Task, error) {
+func (s *Scheduler) GetTask(idx uuid.UUID) (*task, error) {
 	s.taskLock.Lock()
 	defer s.taskLock.Unlock()
 
@@ -51,6 +50,9 @@ func (s *Scheduler) RemoveTask(idx uuid.UUID) error {
 	if err != nil {
 		return err
 	}
+
+	s.taskLock.Lock()
+	defer s.taskLock.Unlock()
 
 	delete(s.tasks, idx)
 	return nil
@@ -73,49 +75,36 @@ func (s *Scheduler) Stop() {
 
 // registerTask validates task's correctness before adding it to the group of tasks.
 // Tasks can run either on a schedule, or be executed only once within the context of the scheduler via the parameter `runOnce`.
-func (s *Scheduler) registerTask(t *Task, runOnce bool) (uuid.UUID, error) {
+func (s *Scheduler) registerTask(t *task, runOnce bool) error {
 	s.taskLock.Lock()
 	defer s.taskLock.Unlock()
 
-	// Go panics with duration <0
-	if t.Interval <= time.Duration(0) {
-		return uuid.UUID{}, fmt.Errorf("invalid interval=%d", t.Interval)
+	if _, ok := s.tasks[t.ID]; ok {
+		return fmt.Errorf("taskid=%s is already registered", t.ID)
 	}
 
-	// Tasks are identified with Google's UUID, but long-term it would be nice
-	// to have internal ID generation to eliminate external dependency
-	taskid, _ := uuid.NewUUID()
-	if _, ok := s.tasks[taskid]; ok {
-		return uuid.UUID{}, fmt.Errorf("taskid=%s is already registered", taskid)
-	}
-
-	// Only add the task to the hash-map of tasks if it's not a one-time run.
-	if !runOnce {
-		s.tasks[taskid] = t
-	}
-
+	s.tasks[t.ID] = t
 	s.execTask(t, runOnce)
-	return taskid, nil
+	return nil
 }
 
-// exec is the entrypoint for the execution of the task. It only accepts a task's identifier.
+// execTask is the entrypoint for the execution of the task. It only accepts a task's identifier.
 // Tasks are ran in goroutines, which belong to each task respectively.
 //
 // @TODO: Should exec accept a task pointer to decouple it from the internal array buffer of tasks?
-func (s *Scheduler) execTask(task *Task, runOnce bool) {
+func (s *Scheduler) execTask(task *task, runOnce bool) {
 	go func() {
 		time.AfterFunc(time.Until(task.StartTime), func() {
 			if err := task.ctx.Err(); err != nil {
-				// @TODO: Add IDs to the task itself
 				// @TODO: Never print stuff to a console directly
 				// A) Return as a slice of errors to the caller
 				// B) Expose a logging interface for the caller to have a control over
 				// C) Ignore (?)
-				fmt.Printf("err: task is cancelled but wanted to be ran\n")
+				fmt.Printf("err: task=%s is cancelled but wanted to be ran\n", task.ID)
 
 				// Make sure to also stop the tick timer
-				if task.t != nil {
-					task.t.Stop()
+				if task.timer != nil {
+					task.timer.Stop()
 				}
 				return
 			}
@@ -128,23 +117,13 @@ func (s *Scheduler) execTask(task *Task, runOnce bool) {
 				tick = time.Until(task.cron.Next())
 			}
 
-			task.t = time.AfterFunc(tick, func() {
+			task.timer = time.AfterFunc(tick, func() {
 				go task.run()
 				defer func() {
 					if !runOnce {
-						// Reset the internal timer.
-						// @TODO: Is there a cleaner way to set this?
-						if task.cron != nil {
-							// CRON reset
-							task.t.Reset(time.Until(task.cron.Next()))
-						} else {
-							// Interval reset
-							task.t.Reset(task.Interval)
-						}
+						task.resetTimer()
 					} else {
-						// Cancel the context and stop the internal timer for a runOnce task
-						task.cancel()
-						task.t.Stop()
+						s.RemoveTask(task.ID)
 					}
 				}()
 			})
@@ -167,8 +146,8 @@ func (s *Scheduler) stopTask(taskid uuid.UUID) error {
 	s.tasks[taskid].cancel()
 
 	// Stops the internal timer of the task
-	if s.tasks[taskid].t != nil {
-		s.tasks[taskid].t.Stop()
+	if s.tasks[taskid].timer != nil {
+		s.tasks[taskid].timer.Stop()
 	}
 	return nil
 }
