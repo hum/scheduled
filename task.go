@@ -25,6 +25,10 @@ type TaskOpts struct {
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
 
+	// Limits the amount of times a single task can be executed in the runtime. After `MaxIter` steps, it will end.
+	// By default, it is 0 (infinite). Negative values are not allowed.
+	MaxIter int
+
 	// Allows the scheduling based on a CRON string. Overrides `Interval`
 	Cron string
 }
@@ -51,13 +55,21 @@ type task struct {
 	// Interval for Fn's execution within the scheduler. This is the function's tick.
 	Interval time.Duration
 
+	// Limits the amount of times a single task can be executed in the runtime. After `MaxIter` steps, it will end.
+	// By default, it is 0 (infinite). Negative values are not allowed.
+	MaxIter int
+
 	// Allows the scheduling based on a CRON string. Overrides `Interval`
 	cron *cron.Expr
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	// Internal timer to keep track of ticks
 	timer *time.Timer
+
+	// Counts the current iteration. Only used if `MaxIter` is set. A task will stop once `itercnt == MaxIter`
+	itercnt int
 }
 
 func NewTask(opts TaskOpts) *task {
@@ -106,6 +118,7 @@ func NewTask(opts TaskOpts) *task {
 		Fn:        opts.Fn,
 		ErrFn:     opts.ErrFn,
 		Interval:  opts.Interval,
+		MaxIter:   opts.MaxIter,
 		StartTime: opts.StartTime,
 		EndTime:   endTime,
 		cron:      cronExpr,

@@ -124,6 +124,16 @@ func (s *Scheduler) execTask(task *task, runOnce bool) {
 					return
 				}
 
+				// Check if the task expired by reaching the maximum
+				if task.MaxIter > 0 {
+					if task.MaxIter == task.itercnt {
+						fmt.Println("task reached max iter")
+						s.RemoveTask(task.ID)
+						return
+					}
+					task.itercnt++
+				}
+
 				go task.run()
 				defer func() {
 					if !runOnce {
